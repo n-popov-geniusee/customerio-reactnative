@@ -9,27 +9,69 @@ class CustomerioReactnative: NSObject {
     @objc static func requiresMainQueueSetup() -> Bool {
         false /// false because our native module's initialization does not require access to UIKit
     }
+
+    private struct InitializeParameters {
+        let siteId: String 
+        let apiKey: String 
+        let region: Region
+        let sdkWrapperConfig: SdkWrapperConfig
+
+        static func getInstance(env: Dictionary<String, AnyHashable>, packageConfig: Dictionary<String, AnyHashable>) -> InitializeParameters? {
+            guard let siteId = env["siteId"] as? String, let apiKey = env["apiKey"] as? String, let region = env["region"] as? String else {
+                return
+            }
+        
+            guard let pversion = packageConfig["version"] as? String, let source = packageConfig["source"] as? String else {
+                return
+            }
+        
+            var sdkSource = SdkWrapperConfig.Source.reactNative
+            if source.lowercased() == "expo" {
+                sdkSource = SdkWrapperConfig.Source.expo
+            }
+            let sdkWrapperConfig = SdkWrapperConfig(source: sdkSource, version: pversion)
+
+            return InitializeParameters(siteId: siteId, apiKey: apiKey, region: Region.getLocation(from: region), sdkWrapperConfig: sdkWrapperConfig)
+        }
+    }
+
+    /**
+     Initialize the package in your Notification Service Extension to setup Rich Push. 
+     */    
+    @available(iOS, unavailable)
+    @available(iOSApplicationExtension, introduced: 13.0)
+    @objc(initialize:configData:packageConfig:)    
+    func initialize(env: Dictionary<String, AnyHashable>, configData: Dictionary<String, AnyHashable>, packageConfig: Dictionary<String, AnyHashable>) -> Void {
+        guard let initializeParameters = InitializeParameters.getInstance(env: env, packageConfig: packageConfig) else { 
+            return 
+        }
+        
+        CustomerIO.initialize(siteId: initializeParameters.siteId, apiKey: initializeParameters.apiKey, region: initializeParameters.region) { (config: inout CioNotificationServiceExtensionSdkConfig) in
+            config._sdkWrapperConfig = initializeParameters.sdkWrapperConfig
+            if let autoTrackDeviceAttributes = configData["autoTrackDeviceAttributes"] as? Bool {
+                config.autoTrackDeviceAttributes = autoTrackDeviceAttributes
+            }
+            
+            // todo do the if let for rest of as! below 
+            config.logLevel = CioLogLevel.getLogValue(for: configData["logLevel"] as? Int)
+            config.autoTrackPushEvents = configData["autoTrackPushEvents"] as? Bool
+            if let trackingApiUrl = configData["trackingApiUrl"] as? String, !trackingApiUrl.isEmpty {
+                config.trackingApiUrl = trackingApiUrl
+            }
+        }
+    }
     
     /**
-     Initialize the package before sending any calls to the package
+     Initialize the package in your app before sending any calls to the package. 
      */
-    @objc(initialize:configData:packageConfig:)
-    func initialize(env: Dictionary<String, AnyHashable>, configData: Dictionary<String, AnyHashable>, packageConfig: Dictionary<String, AnyHashable>) -> Void {
-        
-        guard let siteId = env["siteId"] as? String, let apiKey = env["apiKey"] as? String, let region = env["region"] as? String, let organizationId = env["organizationId"] as? String else {
-            return
+    @available(iOSApplicationExtension, unavailable)
+    @objc(initialize:configData:packageConfig:)        
+    func initialize(env: Dictionary<String, AnyHashable>, configData: Dictionary<String, AnyHashable>, packageConfig: Dictionary<String, AnyHashable>) -> Void {        
+        guard let initializeParameters = InitializeParameters.getInstance(env: env, packageConfig: packageConfig) else { 
+            return 
         }
         
-        guard let pversion = packageConfig["version"] as? String, let source = packageConfig["source"] as? String else {
-            return
-        }
-        
-        var sdkSource = SdkWrapperConfig.Source.reactNative
-        if source.lowercased() == "expo" {
-            sdkSource = SdkWrapperConfig.Source.expo
-        }
-        
-        CustomerIO.initialize(siteId: siteId, apiKey: apiKey, region: Region.getLocation(from: region)) { config in
+        CustomerIO.initialize(siteId: siteId, apiKey: apiKey, region: Region.getLocation(from: region)) { (config: inout CioSdkConfig) in
             config._sdkWrapperConfig = SdkWrapperConfig(source: sdkSource, version: pversion )
             config.autoTrackDeviceAttributes = configData["autoTrackDeviceAttributes"] as! Bool
             config.logLevel = CioLogLevel.getLogValue(for: configData["logLevel"] as! Int)
@@ -40,6 +82,7 @@ class CustomerioReactnative: NSObject {
                 config.trackingApiUrl = trackingApiUrl
             }
         }
+
         if organizationId != "" {
             initializeInApp(organizationId: organizationId)
         }
