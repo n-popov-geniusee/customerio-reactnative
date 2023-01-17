@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="io.customer.reactnative.sdk">
 
-    <application>
+    <!-- <application>
         <service
             android:name=".service.CustomerIOReactNativeFCMService"
             android:exported="false">
@@ -10,5 +10,5 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
-    </application>
+    </application> -->
 </manifest>
